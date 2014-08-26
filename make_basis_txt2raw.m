@@ -105,7 +105,7 @@ end
         elseif(numel(strfind(tline, 'SamplingInterval:'))>0)
             delta_t = str2num(strrep(tline, 'SamplingInterval: ', ''))/1000;   %/1000 so that the unit is s
         elseif(numel(strfind(tline, 'TransmitterFrequency:'))>0)
-            hzpppm = str2num(strrep(tline, 'TransmitterFrequency: ', ''))/1000000;
+            hzpppm = str2num(strrep(tline, 'TransmitterFrequency: ', ''))/1000000;   % [MHz]
         end
         tline = fgetl(first_txt_fid);
     end
@@ -153,11 +153,14 @@ for file_no = 1:total_files
     data_met_txt = importdata(sprintf('%s', in_file{file_no}), '\t', 21);       %imports data from the in_file and gives an cell array with one struct for each metabolite
     degzer = data_met_txt.textdata(logical(cellfun(@numel,regexpi(data_met_txt.textdata, 'ZeroOrder'))));
     degzer = str2double(strrep(strtrim(degzer),'ZeroOrderPhase: ', ''));
-    degppm = data_met_txt.textdata(logical(cellfun(@numel,regexpi(data_met_txt.textdata, 'BeginTime'))));
-    degppm = str2double(strrep(strtrim(degppm),'BeginTime: ', ''));
+    BeginTime = data_met_txt.textdata(logical(cellfun(@numel,regexpi(data_met_txt.textdata, 'BeginTime'))));
+    BeginTime = str2double(strrep(strtrim(BeginTime),'BeginTime: ', ''));
     
     
     for delay_no = 1:total_delays
+        
+        BeginTime_AD = BeginTime + acq_delay(delay_no)/1000;
+        degppm = hzpppm * BeginTime_AD * 360;
         %%%%%%% write .RAW-file %%%%%%%
         raw_out = sprintf('%s/%.6fms/%s_%.6f.RAW', out_dir, acq_delay(delay_no), metabo_names{file_no}, acq_delay(delay_no));
         raw_fid = fopen(raw_out,'w');                                                       %'w' = open or create file for writing, discard content; w+: same but read and write
