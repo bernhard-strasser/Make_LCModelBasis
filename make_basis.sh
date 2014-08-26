@@ -21,12 +21,16 @@ in_flag=0
 out_flag=0
 acq_delay_flag=0
 reference_TMS_flag=0
+ppm_start_flag=0
+ppm_end_flag=0
 
 in_file="./"
 out_dir="./basis_files"
 acq_delay=0
+ppm_start=4.2
+ppm_end=0.2
 
-while getopts 'i:o:a:r:' OPTION
+while getopts 'i:o:a:r:s:e:' OPTION
 do
 	case $OPTION in
 	  i)	in_flag=1
@@ -41,7 +45,13 @@ do
 	  r)	reference_TMS_flag=1
 			reference_TMS_file="$OPTARG"
 			;;
-	  ?)	printf "Usage: %s: [-i input_file or input_directory] (default: ./*.txt) [-o output_dir] (default: ./basis_files)  [-a acq_delay] (default=0)\n" $(basename $0) >&2
+	  s)	ppm_start_flag=1
+			ppm_start="$OPTARG"
+			;;
+	  e)	ppm_end_flag=1
+			ppm_end="$OPTARG"
+			;;
+	  ?)	printf "Usage: %s: [-i input_file or input_directory] (default: ./*.txt) [-o output_dir] (default: ./basis_files)  [-a acq_delay] (default=0ms, acq delay > 0ms truncates points at the beginning)\n[-r reference_file] (ref_file is FID of reference peak like dss/TMS) [-s ppm_start] [-e ppm_end] (ppm_start is the larger one!)\n" $(basename $0) >&2
 			exit 2
 			;;
 	esac
@@ -79,6 +89,8 @@ chmod 755 $tmp   ### 755 = user: write read exec   group: read exec    world: re
 echo ${in_file} >  $tmp
 echo ${out_dir} >>  $tmp
 echo ${reference_TMS_file} >> $tmp
+echo ${ppm_start} >> $tmp
+echo ${ppm_end} >> $tmp
 echo ${acq_delay} >>  $tmp
 echo "END" >>  $tmp
 
@@ -99,7 +111,7 @@ for out_sub_dir in $OutDir_list ; do
 done
 
 
-#rm -r ./tmp
+rm -r ./tmp
 echo -e "\n\n   END"
 
 

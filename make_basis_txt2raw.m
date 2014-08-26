@@ -38,6 +38,9 @@ end
 % get path of reference-file
 ref_TMS_file = fscanf(info_fid,'%s',1);
 
+% ppm_start and ppm_end
+ppm_start = str2double(fscanf(info_fid,'%s',1));
+ppm_end = str2double(fscanf(info_fid,'%s',1));
 
 %%%%%%% get all the acq delays for which the conversion should be done %%%%%%%%
 delay_no = 1;
@@ -65,8 +68,8 @@ end
 
 
 %%%%%%% get all the names of the metabolites and replace the input with their standard names (eg make Ala out of ala_7T and so on) %%%%%%%%
-metabo_seekndestroy = struct('search', {'ala','asp','cho','(?<!p)cr','gaba','glc','gln','glu','gly','gpc','lac','lip_c','mI','ins','mm3','mm4','naa(?!g)','naag','pch','pcr','scyllo','tau'}, ...
-'replace', {'Ala','Asp','Cho','Cr','GABA','Glc','Gln','Glu','Gly','GPC','Lac','Lip_c','Ins','Ins','mm3','mm4','NAA','NAAG','PCh','PCr','Scyllo','Tau'});
+metabo_seekndestroy = struct('search', {'ala','asp','cho','(?<!p)cr','gaba','glc','gln','glu','gly','gpc','lac','lip_c','mI','ins','mm3','mm4','naa(?!g)','naag','pch','pcr','scyllo','tau','fat', 'water'}, ...
+'replace', {'Ala','Asp','Cho','Cr','GABA','Glc','Gln','Glu','Gly','GPC','Lac','Lip_c','Ins','Ins','mm3','mm4','NAA','NAAG','PCh','PCr','Scyllo','Tau', 'fat', 'water'});
 % (?<!p)cr means that if a 'p' is before the 'cr' it is no match, only if it's just 'cr'it is counted as a match. ("look behind from current position", see matlab internet help > regexp > lookaround operators), 
 % the same for naa where naag is not counted as match (look ahead)
 
@@ -79,8 +82,13 @@ for search_dummy = 1:size({metabo_seekndestroy.search},2)
     match_log = logical(cellfun(@numel,regexpi(metabo_names, metabo_seekndestroy(search_dummy).search)));
     % regexpi: searches all the metabo_names for the strings in metabo_seekndestroy.search; then the numel-function is done for every cell of the array; a logical array is made out of that, giving the cells with matches
     %if match_log is [0 0 ... 0] then metabo_names{match_log} = ... gives a problem.
-    if(~isequal(match_log,zeros(1,size(metabo_names,2))))     
-        metabo_names{match_log} = metabo_seekndestroy(search_dummy).replace;
+    if(sum(match_log)>1)
+        fprintf('\n\nProblem: In the list of your metabolites one metabolite is twice\nAborting Program\n')
+        quit force
+    else
+        if(~isequal(match_log,zeros(1,size(metabo_names,2))))     
+            metabo_names{match_log} = metabo_seekndestroy(search_dummy).replace;
+        end
     end
 end
 
@@ -126,7 +134,7 @@ for delay_no = 1:total_delays
     fprintf(makebasis_fid,' AUTOSC=.false.\n');                                                                      %Autoscaling: scales the individual metabos automatically
     %fprintf(makebasis_fid,' AUTOPH=.TRUE.\n');
     fprintf(makebasis_fid,' IDBASI=''FID TE=%.6f (April 2011)''\n', acq_delay(delay_no));
-    fprintf(makebasis_fid,' ppmst=4.2  ppmend=0.2\n $END\n\n\n');                                                    %area of ppm for which LCM creates the basis-metabos
+    fprintf(makebasis_fid,' ppmst=%3.1f  ppmend=%3.1f\n $END\n\n\n', ppm_start, ppm_end);                                                    %area of ppm for which LCM creates the basis-metabos
     fclose(makebasis_fid);
 end
 
@@ -138,36 +146,11 @@ end
 %read data of the reference.txt file that is used for all .RAW-files
 data_ref_txt = importdata(sprintf('%s',ref_TMS_file), '\t', 21);
 
-% data_ref_txt.data(:,1:2) = data_ref_txt.data(:,1:2) + 6;
-
-
 
 %%%%%%%% write .RAW-data and that parts of makebasis.in that contain info of each metabolite %%%%%%%
 for file_no = 1:total_files
  
     data_met_txt = importdata(sprintf('%s', in_file{file_no}), '\t', 21);       %imports data from the in_file and gives an cell array with one struct for each metabolite
-    
-%     xxx=data_met_txt.data(:,3:4);        %%% this would use only the reference data where the reference peak is, so it is nowhere zero.
-%     xxy=data_ref_txt.data(:,3:4);
-%     plot(xxy(:,1)+xxy(:,1))
-%     waitforbuttonpress
-%     
-%     added_freq_domain = zeros(total_points,2);
-%     added_freq_domain(1:14750,:) = xxx(1:14750,1:2)+xxy(1:14750,1:2);
-%     added_freq_domain(14751:15030,:) = xxy(14751:15030,1:2);
-%     added_freq_domain(15031:total_points,:) = xxx(15031:total_points,1:2)+xxy(15031:total_points,1:2);
-%     plot(added_freq_domain(:,1))
-%     waitforbuttonpress
-    
-%     plot(real(xxy))
-%     waitforbuttonpress
-%     xxx=real(fftshift(fft(data_met_txt.data(:,1)+1i*data_met_txt.data(:,2), size(data_met_txt.data,1))));
-%     plot(xxx)
-%     waitforbuttonpress
-    
-
-
-    % data_met_txt.data = data_ref_txt.data + data_met_txt.data;                  %adds the reference data so that for every metabolite there is the reference peak as well in the spectrum for LCM processing
     degzer = data_met_txt.textdata(logical(cellfun(@numel,regexpi(data_met_txt.textdata, 'ZeroOrder'))));
     degzer = str2double(strrep(strtrim(degzer),'ZeroOrderPhase: ', ''));
     degppm = data_met_txt.textdata(logical(cellfun(@numel,regexpi(data_met_txt.textdata, 'BeginTime'))));
@@ -183,36 +166,24 @@ for file_no = 1:total_files
         fprintf(raw_fid, ' ID=%s_%.6f.RAW\n',metabo_names{file_no},acq_delay(delay_no));	%volume gives the voxel size in ml. It is not important when using autoscaling; see also LCM-manual pages 90ff.
         fprintf(raw_fid, ' fmtdat=''(2e14.5)''\n tramp=1.0\n volume=1.0\n $END\n');  
         % writing data in the format 2e14.5
-        trunc_points = round(acq_delay(delay_no)/(1000*delta_t));                           %1 point means delta_t ms. so x ms are x/delta_t points.
+        trunc_points = round(acq_delay(delay_no)/(1000*delta_t));                                                   %1 point means delta_t ms. so x ms are x/delta_t points. 
         
+        %adds the reference data so that for every metabolite there is the reference peak as well in the spectrum for LCM processing; but LCM has a problem when the real part of the ref peak is negative everywhere;
+        %so the reference peak get not truncated at the beginning (then it would get a phase 1st order and could be totally negative) but at the end; then it gets added to the metabo FID that gets truncated at the 
+        %beginning. If one would not truncate the ref FID but add the trunc metabo FID to the (trunc_point+1). point of the ref peak, this would be equal to setting the metabo FID at the beginning to zero which leads
+        %to shit.
+        data_trunc = data_met_txt.data(trunc_points+1:end,1:2)+data_ref_txt.data(1:total_points-trunc_points,1:2);  %only writes columns 1 (real FID-data) and 2 (imaginary FID-data) (col3,4 = spectra) 
         
-        data_trunc = data_met_txt.data(trunc_points+1:end,1:2)+...                 %only writes columns 1 (real FID-data) and 2 (imaginary FID-data) (col3,4 = spectra) and just rows trunc_points+1 until end
-        data_ref_txt.data(1:total_points-trunc_points,1:2);
-        data_trunc(:,2) = (-1)*data_trunc(:,2);
-%     
-%         plot(real(fftshift(fft(data_trunc(:,1)+1i*data_trunc(:,2),size(data_trunc,1)))))
-%         waitforbuttonpress
-%         
-%         data_trunc = data_met_txt.data(trunc_points+1:end,1:2)+...                 %only writes columns 1 (real FID-data) and 2 (imaginary FID-data) (col3,4 = spectra) and just rows trunc_points+1 until end
-%         data_ref_txt.data(trunc_points+1:end,1:2);
-%         data_trunc(:,2) = (-1)*data_trunc(:,2); 
-%     
-%         plot(real(fftshift(fft(data_trunc(:,1)+1i*data_trunc(:,2),size(data_trunc,1)))))
-%         waitforbuttonpress
-
-    
-%         data_trunc(:,2) = (-1)*data_trunc(:,2);                                             %multiplying the imaginary part of FID results in flipping the spectrum (eg when the reference peak is right to         
+        data_trunc(:,2) = (-1)*data_trunc(:,2);                                             %multiplying the imaginary part of FID results in flipping the spectrum (eg when the reference peak is right to         
         data_trunc=[(data_trunc(:,1))';data_trunc(:,2)'];                                   %some other peak after multiplying it is on the left.) Why is this needed to be done??
-                                                                                            %fwrite writes arrays from left to right!!!! 
+                                                                                            %fprintf writes arrays from left to right!!!!  so this [data_trunc(:,1))' ...
         fprintf(raw_fid, '%14.5e%14.5e\n', data_trunc);                                                                                              
         fclose(raw_fid);  
-        
-        
         clear data_trunc 
         
         %%%%%%% write metabolite-info to makebasis.in-file %%%%%%%
         makebasis_out = sprintf('%s/%.6fms/makebasis_%.6f.in', out_dir, acq_delay(delay_no), acq_delay(delay_no));
-        makebasis_fid = fopen(makebasis_out,'a');           % 'a' = open or create file, append data/text to file
+        makebasis_fid = fopen(makebasis_out,'a');               % 'a' = open or create file, append data/text to file
         fprintf(makebasis_fid, ' $NMEACH\n'); 
         fprintf(makebasis_fid, ' filraw=''%s/%.6fms/%s_%.6f.RAW''\n',out_dir,acq_delay(delay_no),metabo_names{file_no},acq_delay(delay_no));
         fprintf(makebasis_fid, ' METABO=''%s''\n',metabo_names{file_no});
