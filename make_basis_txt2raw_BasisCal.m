@@ -2,7 +2,7 @@
 %%%%%%%%%%%%%% program to read out .txt-files given by make_basis.sh, convert to .RAW and create basis.in file %%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-clear variables;close all;
+clear all;close all;
 
 
 
@@ -128,7 +128,7 @@ for delay_no = 1:total_delays
     
     fprintf(makebasis_fid, ' $seqpar\n seq=''FID''\n');                                                              %says which sequence is used
     fprintf(makebasis_fid,' echot=%.6f\n', acq_delay(delay_no));
-    fprintf(makebasis_fid, ' $end\n fwhmba=0.020\n\n');                                                              %FWHM of basis peaks (singlets?) in ppm
+    fprintf(makebasis_fid, ' $end\n fwhmba=0.020\n\n');                                                              %FWHM of basis signelt peaks in ppm
     
     fprintf(makebasis_fid, ' $NMALL\n');
     fprintf(makebasis_fid,' HZPPPM=%8.4f\n', hzpppm);
@@ -136,10 +136,19 @@ for delay_no = 1:total_delays
     fprintf(makebasis_fid,' nunfil=%d\n', total_points-round(acq_delay(delay_no)/(1000*delta_t)));                   %1 point is 1000delta_t ms --> 1 ms is 1/(1000delta_t) points. -> acq_delay ms are acq_del/(1000delta_t) p
     fprintf(makebasis_fid,' FILBAS=''%s/fid_%.6fms.basis''\n', out_dir, acq_delay(delay_no));   %path where basis-file should be created
     fprintf(makebasis_fid,' FILPS=''%s/fid_%.6fms.ps''\n', out_dir, acq_delay(delay_no));
+    
+    fprintf(makebasis_fid,' BASCAL=T\n');    
+    fprintf(makebasis_fid,' CHBCAL=''GPC''\n');        
+    fprintf(makebasis_fid,' NCALIB=1\n');            
+    fprintf(makebasis_fid,' CHCALI(1)=''PCh''\n');            
+    fprintf(makebasis_fid,' PPMST=3.45\n');
+    
+    
     fprintf(makebasis_fid,' AUTOSC=.false.\n');                                                                      %Autoscaling: scales the individual metabos automatically
     %fprintf(makebasis_fid,' AUTOPH=.TRUE.\n');
     fprintf(makebasis_fid,' IDBASI=''FID TE=%.6f (April 2011)''\n', acq_delay(delay_no));
-    fprintf(makebasis_fid,' ppmst=%3.1f  ppmend=%3.1f\n $END\n\n\n', ppm_start, ppm_end);                                                    %area of ppm for which LCM creates the basis-metabos            
+    fprintf(makebasis_fid,' $END\n\n\n');                                                    %area of ppm for which LCM creates the basis-metabos    
+    
     
     fclose(makebasis_fid);
 end
@@ -149,73 +158,72 @@ end
 %% 5. Write .RAW-files and the metabolite-dependend part of makebasis.in
 
 
-%read data of the reference.txt file that is used for all .RAW-files
-data_ref_txt = importdata(sprintf('%s',ref_TMS_file), '\t', 21);
-
-
-%%%%%%%% write .RAW-data and that parts of makebasis.in that contain info of each metabolite %%%%%%%
-for file_no = 1:total_files
- 
-    data_met_txt = importdata(sprintf('%s', in_file{file_no}), '\t', 21);       %imports data from the in_file and gives an cell array with one struct for each metabolite
-    degzer = data_met_txt.textdata(logical(cellfun(@numel,regexpi(data_met_txt.textdata, 'ZeroOrder'))));
-    degzer = str2double(strrep(strtrim(degzer),'ZeroOrderPhase: ', ''));
-    BeginTime = data_met_txt.textdata(logical(cellfun(@numel,regexpi(data_met_txt.textdata, 'BeginTime'))));
-    BeginTime = str2double(strrep(strtrim(BeginTime),'BeginTime: ', ''));
-    
-    
-    for delay_no = 1:total_delays
-        
-        BeginTime_AD = BeginTime + acq_delay(delay_no)/1000;
-        degppm = hzpppm * BeginTime_AD * 360 * 0;
-        %%%%%%% write .RAW-file %%%%%%%
-        raw_out = sprintf('%s/%.6fms/%s_%.6f.RAW', out_dir, acq_delay(delay_no), metabo_names{file_no}, acq_delay(delay_no));
-        raw_fid = fopen(raw_out,'w');                                                       %'w' = open or create file for writing, discard content; w+: same but read and write
-        % write some header info to RAW-file
-        fprintf(raw_fid, ' $NMID\n');                                                       %tramp is a factor in order to scale the spectrum of the metabolite. it is not important when using autoscaling.
-        fprintf(raw_fid, ' ID=%s_%.6f.RAW\n',metabo_names{file_no},acq_delay(delay_no));	%volume gives the voxel size in ml. It is not important when using autoscaling; see also LCM-manual pages 90ff.
-        fprintf(raw_fid, ' fmtdat=''(2e14.5)''\n tramp=1.0\n volume=1.0\n $END\n');  
-        % writing data in the format 2e14.5
-        trunc_points = round(acq_delay(delay_no)/(1000*delta_t));                                                   %1 point means delta_t ms. so x ms are x/delta_t points. 
-        
-        %adds the reference data so that for every metabolite there is the reference peak as well in the spectrum for LCM processing; but LCM has a problem when the real part of the ref peak is negative everywhere;
-        %so the reference peak get not truncated at the beginning (then it would get a phase 1st order and could be totally negative) but at the end; then it gets added to the metabo FID that gets truncated at the 
-        %beginning. If one would not truncate the ref FID but add the trunc metabo FID to the (trunc_point+1). point of the ref peak, this would be equal to setting the metabo FID at the beginning to zero which leads
-        %to shit.
-        data_trunc = data_met_txt.data(trunc_points+1:end,1:2)+data_ref_txt.data(1:total_points-trunc_points,1:2);  %only writes columns 1 (real FID-data) and 2 (imaginary FID-data) (col3,4 = spectra) 
-        
-        data_trunc(:,2) = (-1)*data_trunc(:,2);                                             %multiplying the imaginary part of FID results in flipping the spectrum (eg when the reference peak is right to         
-        data_trunc=[(data_trunc(:,1))';data_trunc(:,2)'];                                   %some other peak after multiplying it is on the left.) Why is this needed to be done??
-                                                                                            %fprintf writes arrays from left to right!!!!  so this [data_trunc(:,1))' ...
-        fprintf(raw_fid, '%14.5e%14.5e\n', data_trunc);                                                                                              
-        fclose(raw_fid);  
-        clear data_trunc 
-        
-        %%%%%%% write metabolite-info to makebasis.in-file %%%%%%%
-        makebasis_out = sprintf('%s/%.6fms/makebasis_%.6f.in', out_dir, acq_delay(delay_no), acq_delay(delay_no));
-        makebasis_fid = fopen(makebasis_out,'a');               % 'a' = open or create file, append data/text to file
-        fprintf(makebasis_fid, ' $NMEACH\n'); 
-        fprintf(makebasis_fid, ' filraw=''%s/%.6fms/%s_%.6f.RAW''\n',out_dir,acq_delay(delay_no),metabo_names{file_no},acq_delay(delay_no));
-        fprintf(makebasis_fid, ' METABO=''%s''\n',metabo_names{file_no});
-        fprintf(makebasis_fid, ' DEGZER=%3.1f\n',degzer);       %Zero order phase of metabo
-        fprintf(makebasis_fid, ' DEGPPM=%3.1f\n',degppm);       %First order phase of metabo 
-        
-        if(strcmp(metabo_names{file_no}, 'PCh'))                %PCh has different concentration in this simulation
-            fprintf(makebasis_fid, ' CONC=0.385\n');               % 0.385
-        else
-            fprintf(makebasis_fid, ' CONC=1.\n');
-        end
-        
-        %fprintf(makebasis_fid, ' XTRASH = -0.05\n');           % Extra Shift: Shifts All Data by e.g. -0.05 ppm
-        fprintf(makebasis_fid, ' concsc=1.,  fwhmsm=.0\n');     %concsc= concentration of the standard (reference), fwhmsm gibts nirgends im LCM Manual !!?? Hat Provencher dazugeschrieben???
-        fprintf(makebasis_fid, ' PPMAPP=0.1, -.4\n');  
-        %PPMAPP is the apparent (unreferenced) ppm-axis that contains referencing peak. If DSS (TMS) is the marker for the metabolite, then PPMAPP = 0.1, -0.4 is typically sufficient to bracket the peak.
-        fprintf(makebasis_fid, ' $END\n\n');                    %at the end of makebasis.in there has to be a new line after $END, otherwise LCM doesn't create anything for the last metabolite!
-        fclose(makebasis_fid);   
-    end
-    
-    
-    clear data_met_txt
-end
+% %read data of the reference.txt file that is used for all .RAW-files
+% data_ref_txt = importdata(sprintf('%s',ref_TMS_file), '\t', 21);
+% 
+% 
+% %%%%%%%% write .RAW-data and that parts of makebasis.in that contain info of each metabolite %%%%%%%
+% for file_no = 1:total_files
+%  
+%     data_met_txt = importdata(sprintf('%s', in_file{file_no}), '\t', 21);       %imports data from the in_file and gives an cell array with one struct for each metabolite
+%     degzer = data_met_txt.textdata(logical(cellfun(@numel,regexpi(data_met_txt.textdata, 'ZeroOrder'))));
+%     degzer = str2double(strrep(strtrim(degzer),'ZeroOrderPhase: ', ''));
+%     BeginTime = data_met_txt.textdata(logical(cellfun(@numel,regexpi(data_met_txt.textdata, 'BeginTime'))));
+%     BeginTime = str2double(strrep(strtrim(BeginTime),'BeginTime: ', ''));
+%     
+%     
+%     for delay_no = 1:total_delays
+%         
+%         BeginTime_AD = BeginTime + acq_delay(delay_no)/1000;
+%         degppm = hzpppm * BeginTime_AD * 360 * 0;
+%         %%%%%%% write .RAW-file %%%%%%%
+%         raw_out = sprintf('%s/%.6fms/%s_%.6f.RAW', out_dir, acq_delay(delay_no), metabo_names{file_no}, acq_delay(delay_no));
+%         raw_fid = fopen(raw_out,'w');                                                       %'w' = open or create file for writing, discard content; w+: same but read and write
+%         % write some header info to RAW-file
+%         fprintf(raw_fid, ' $NMID\n');                                                       %tramp is a factor in order to scale the spectrum of the metabolite. it is not important when using autoscaling.
+%         fprintf(raw_fid, ' ID=%s_%.6f.RAW\n',metabo_names{file_no},acq_delay(delay_no));	%volume gives the voxel size in ml. It is not important when using autoscaling; see also LCM-manual pages 90ff.
+%         fprintf(raw_fid, ' fmtdat=''(2e14.5)''\n tramp=1.0\n volume=1.0\n $END\n');  
+%         % writing data in the format 2e14.5
+%         trunc_points = round(acq_delay(delay_no)/(1000*delta_t));                                                   %1 point means delta_t ms. so x ms are x/delta_t points. 
+%         
+%         %adds the reference data so that for every metabolite there is the reference peak as well in the spectrum for LCM processing; but LCM has a problem when the real part of the ref peak is negative everywhere;
+%         %so the reference peak get not truncated at the beginning (then it would get a phase 1st order and could be totally negative) but at the end; then it gets added to the metabo FID that gets truncated at the 
+%         %beginning. If one would not truncate the ref FID but add the trunc metabo FID to the (trunc_point+1). point of the ref peak, this would be equal to setting the metabo FID at the beginning to zero which leads
+%         %to shit.
+%         data_trunc = data_met_txt.data(trunc_points+1:end,1:2)+data_ref_txt.data(1:total_points-trunc_points,1:2);  %only writes columns 1 (real FID-data) and 2 (imaginary FID-data) (col3,4 = spectra) 
+%         
+%         data_trunc(:,2) = (-1)*data_trunc(:,2);                                             %multiplying the imaginary part of FID results in flipping the spectrum (eg when the reference peak is right to         
+%         data_trunc=[(data_trunc(:,1))';data_trunc(:,2)'];                                   %some other peak after multiplying it is on the left.) Why is this needed to be done??
+%                                                                                             %fprintf writes arrays from left to right!!!!  so this [data_trunc(:,1))' ...
+%         fprintf(raw_fid, '%14.5e%14.5e\n', data_trunc);                                                                                              
+%         fclose(raw_fid);  
+%         clear data_trunc 
+%         
+%         %%%%%%% write metabolite-info to makebasis.in-file %%%%%%%
+%         makebasis_out = sprintf('%s/%.6fms/makebasis_%.6f.in', out_dir, acq_delay(delay_no), acq_delay(delay_no));
+%         makebasis_fid = fopen(makebasis_out,'a');               % 'a' = open or create file, append data/text to file
+%         fprintf(makebasis_fid, ' $NMEACH\n'); 
+%         fprintf(makebasis_fid, ' filraw=''%s/%.6fms/%s_%.6f.RAW''\n',out_dir,acq_delay(delay_no),metabo_names{file_no},acq_delay(delay_no));
+%         fprintf(makebasis_fid, ' METABO=''%s''\n',metabo_names{file_no});
+%         fprintf(makebasis_fid, ' DEGZER=%3.1f\n',degzer);       %Zero order phase of metabo
+%         fprintf(makebasis_fid, ' DEGPPM=%3.1f\n',degppm);       %First order phase of metabo 
+%         
+%         if(strcmp(metabo_names{file_no}, 'PCh'))                %PCh has different concentration in this simulation
+%             fprintf(makebasis_fid, ' CONC=0.385\n');               % 0.385
+%         else
+%             fprintf(makebasis_fid, ' CONC=1.\n');
+%         end
+%         
+%         fprintf(makebasis_fid, ' concsc=1.,  fwhmsm=.0\n');     %concsc= concentration of the standard (reference), fwhmsm gibts nirgends im LCM Manual !!?? Hat Provencher dazugeschrieben???
+%         fprintf(makebasis_fid, ' PPMAPP=0.1, -.4\n');  
+%         %PPMAPP is the apparent (unreferenced) ppm-axis that contains referencing peak. If DSS (TMS) is the marker for the metabolite, then PPMAPP = 0.1, -0.4 is typically sufficient to bracket the peak.
+%         fprintf(makebasis_fid, ' $END\n\n');                    %at the end of makebasis.in there has to be a new line after $END, otherwise LCM doesn't create anything for the last metabolite!
+%         fclose(makebasis_fid);   
+%     end
+%     
+%     
+%     clear data_met_txt
+% end
 
 
 

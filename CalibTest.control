@@ -1,0 +1,14 @@
+ $LCMODL
+ BASCAL=T
+ CHBCAL='GPC'
+ NCALIB=1
+ CHCALI(1)='PCh'
+ PPMST=3.45
+ HZPPPM=2.972230e+02, DELTAT=3.333300e-05, NUNFIL=32768
+ OWNER='MR Exzellenzzentrum, Radiodiagnostik, MUW'
+ Title='CalibTest'
+ FILBAS='/sacher/melange/raid/bstrasser/PROCESS/Basis_Sets/Basis_Set_0.033333ms_WithLacAc_PChConc1/LCModelOutput/fid_0.000000ms.basis'
+ NEACH=99
+ FILPS='/sacher/melange/raid/bstrasser/PROCESS/Basis_Sets/Basis_Set_0.033333ms_WithLacAc_PChConc1/Calibtest/CalibTest.ps'
+ FILRAW='/sacher/melange/raid/bstrasser/PROCESS/Basis_Sets/Basis_Set_0.033333ms_WithLacAc_PChConc1/LCModelOutput/0.000000ms/PCh_0.000000.RAW'
+ $END

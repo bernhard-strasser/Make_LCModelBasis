@@ -109,8 +109,8 @@ if [[ -e $out_dir ]]; then
 fi
 
 
-m78 -nodisplay -nojvm < make_basis_txt2raw_BasisCal.m
-read asdf
+m78 -nodisplay -nojvm < make_basis_txt2raw.m
+
 
 echo -e "\n\nLCmodel processing started!\n"
 
@@ -121,6 +121,12 @@ for out_sub_dir in $OutDir_list ; do
 	$HOME/.lcmodel/bin/makebasis < $out_sub_dir/makebasis*.in
 	# rm -r $out_sub_dir
 done
+
+
+
+echo -e "\n\nStarting Calibration Test\n"
+
+
 
 
 rm -r ./tmp
