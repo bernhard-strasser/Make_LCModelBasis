@@ -110,7 +110,7 @@ fi
 
 
 m78 -nodisplay -nojvm < make_basis_txt2raw_BasisCal.m
-read asdf
+
 
 echo -e "\n\nLCmodel processing started!\n"
 

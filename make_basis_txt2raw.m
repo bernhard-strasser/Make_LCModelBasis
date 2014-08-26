@@ -116,7 +116,7 @@ end
     end
     fclose(first_txt_fid);
 
-    
+    save('./tmp/BasisCalTestings.mat', 'hzpppm', 'delta_t', 'total_points', 'out_dir', 'acq_delay');
     
 %% 4. Write that part of makebasis.in that is equal for all metabolites
     
@@ -199,13 +199,13 @@ for file_no = 1:total_files
         fprintf(makebasis_fid, ' DEGZER=%3.1f\n',degzer);       %Zero order phase of metabo
         fprintf(makebasis_fid, ' DEGPPM=%3.1f\n',degppm);       %First order phase of metabo 
         
-        if(strcmp(metabo_names{file_no}, 'PCh'))                %PCh has different concentration in this simulation
-            fprintf(makebasis_fid, ' CONC=0.385\n');               % 0.385
-        else
+%         if(strcmp(metabo_names{file_no}, 'PCh'))                %PCh has different concentration in this simulation
+%             fprintf(makebasis_fid, ' CONC=0.385\n');               % 0.385
+%         else
             fprintf(makebasis_fid, ' CONC=1.\n');
-        end
+%        end
         
-        %fprintf(makebasis_fid, ' XTRASH = -0.05\n');           % Extra Shift: Shifts All Data by e.g. -0.05 ppm
+        fprintf(makebasis_fid, ' XTRASH = -0.0005\n');           % Extra Shift: Shifts All Data by e.g. -0.05 ppm
         fprintf(makebasis_fid, ' concsc=1.,  fwhmsm=.0\n');     %concsc= concentration of the standard (reference), fwhmsm gibts nirgends im LCM Manual !!?? Hat Provencher dazugeschrieben???
         fprintf(makebasis_fid, ' PPMAPP=0.1, -.4\n');  
         %PPMAPP is the apparent (unreferenced) ppm-axis that contains referencing peak. If DSS (TMS) is the marker for the metabolite, then PPMAPP = 0.1, -0.4 is typically sufficient to bracket the peak.

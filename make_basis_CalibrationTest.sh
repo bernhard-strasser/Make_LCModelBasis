@@ -125,8 +125,8 @@ done
 
 
 echo -e "\n\nStarting Calibration Test\n"
-
-
+m78 -nodisplay -nojvm < make_basis_txt2raw_CalibrationTest.m
+/usr/local/lcmodel/bin/lcmodel < ${out_dir}/BasisCalibrationTest/CalibTest.control
 
 
 rm -r ./tmp
