@@ -109,7 +109,7 @@ if [[ -e $out_dir ]]; then
 fi
 
 
-m78 -nodisplay -nojvm < make_basis_txt2raw_BasisCal.m
+m78 -nodisplay -nojvm < make_basis_txt2raw.m
 
 
 echo -e "\n\nLCmodel processing started!\n"
