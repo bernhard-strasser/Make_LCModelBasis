@@ -21,6 +21,6 @@
 
 #0.0 1.0 1.2 1.3 2.3 2.4 2.5 3.4 3.5 4.5 4.6
 
-./make_basis_CalibrationTest.sh -i /mokka1/projects/MRSI_Projects/Basis_Sets/Basis_Set_0.033333ms_WithLacAc_PChConc1_NoNAAGGluMoiety_CorrectedGABA_CorrectLip/jmrui/Output \
--o /mokka1/projects/MRSI_Projects/Basis_Sets/Basis_Set_0.033333ms_WithLacAc_PChConc1_NoNAAGGluMoiety_CorrectedGABA_CorrectLip/LCModelOutput_GovindGABA2_HSI \
--a "3.3 4.3" -r /mokka1/projects/MRSI_Projects/Basis_Sets/Basis_Set_0.033333ms_WithLacAc_PChConc1_NoNAAGGluMoiety_CorrectedGABA_CorrectLip/jmrui/Output/dss.txt -s 4.6 -e -0.2
+./make_basis_CalibrationTest.sh -i /net/mri.meduniwien.ac.at/departments/radiology/mrsbrain/home/mpovazan/BasisSets/Output \
+-o /net/mri.meduniwien.ac.at/departments/radiology/mrsbrain/home/mpovazan/BasisSets/LCModelOutput_GovindGABA_570ms_09_MM_second_shifted \
+-a "0 1.3 2.3" -r /net/mri.meduniwien.ac.at/departments/radiology/mrsbrain/home/mpovazan/BasisSets/Output/dss.txt -s 4.2 -e -0.5

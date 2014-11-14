@@ -70,9 +70,9 @@ end
 %%%%%%% get all the names of the metabolites and replace the input with their standard names (eg make Ala out of ala_7T and so on) %%%%%%%%
 metabo_seekndestroy = struct( ...
 'search', ...
-{'acetate','act','ala','alphaglucose','asp','betaglucose','cho','(?<!p)cr','gaba','glc(?!_)','gln','glu(?!c)','gly','gpc','GSH','Glutathione','ins','lac','lip_c','mI' ,'mm3','mm4','naa(?!g)','naag','pch','pcr','scyllo','tau','fat','water'}, ...
+{'acetate','act','ala','alphaglucose','asp','betaglucose','cho','(?<!p)cr','gaba','glc(?!_)','gln','glu(?!c)','gly','gpc','GSH','Glutathione','ins','lac','lip_c','mI' ,'mm3','mm4','naa(?!g)','naag','pch','pcr','scyllo','tau','fat','water','MM_meas'}, ...
 'replace', ...
-{'Act'    ,'Act','Ala','Glc'         ,'Asp','Glc_B'   ,'Cho','Cr'      ,'GABA','Glc'     ,'Gln','Glu'     ,'Gly','GPC','GSH','GSH'        ,'Ins','Lac','Lip_c','Ins','mm3','mm4','NAA'     ,'NAAG','PCh','PCr','Scyllo','Tau','fat','water'});
+{'Act'    ,'Act','Ala','Glc'         ,'Asp','Glc_B'   ,'Cho','Cr'      ,'GABA','Glc'     ,'Gln','Glu'     ,'Gly','GPC','GSH','GSH'        ,'Ins','Lac','Lip_c','Ins','mm3','mm4','NAA'     ,'NAAG','PCh','PCr','Scyllo','Tau','fat','water','MM_meas'});
 % (?<!p)cr means that if a 'p' is before the 'cr' it is no match, only if it's just 'cr'it is counted as a match. ("look behind from current position", see matlab internet help > regexp > lookaround operators), 
 % the same for naa where naag is not counted as match (look ahead)
 % alphaglucose = Glc, because betaglucose can hardly be detected in vivo
@@ -161,7 +161,9 @@ for file_no = 1:total_files
     degzer = str2double(strrep(strtrim(degzer),'ZeroOrderPhase: ', ''));
     BeginTime = data_met_txt.textdata(logical(cellfun(@numel,regexpi(data_met_txt.textdata, 'BeginTime'))));
     BeginTime = str2double(strrep(strtrim(BeginTime),'BeginTime: ', ''));
-    
+    if(strcmp(metabo_names{file_no},'MM_meas'))
+        data_met_txt.data = data_met_txt.data/100;
+    end
     
     for delay_no = 1:total_delays
         
@@ -175,8 +177,18 @@ for file_no = 1:total_files
         fprintf(raw_fid, ' ID=%s_%.6f.RAW\n',metabo_names{file_no},acq_delay(delay_no));	%volume gives the voxel size in ml. It is not important when using autoscaling; see also LCM-manual pages 90ff.
         fprintf(raw_fid, ' fmtdat=''(2e14.5)''\n tramp=1.0\n volume=1.0\n $END\n');  
         % writing data in the format 2e14.5
-        trunc_points = round(acq_delay(delay_no)/(1000*delta_t));                                                   %1 point means delta_t ms. so x ms are x/delta_t points. 
+        % if condition for MM inclusion - this implementation should be
+        % correct for acq delays bigger than 1.3, however, this should be
+        % double tested (now the acquisition delay for mm biger than 1.3ms is the difference see elseif part)
+        if acq_delay(delay_no)<=1.3 && strcmp(metabo_names{file_no},'MM_meas')
+            trunc_points = 0; 
+        elseif acq_delay(delay_no)>1.3 && strcmp(metabo_names{file_no},'MM_meas')
+            trunc_points = round((acq_delay(delay_no)-acq_delay(delay_no-1))/(1000*delta_t));
+        else
+            trunc_points = round(acq_delay(delay_no)/(1000*delta_t));                                                   %1 point means delta_t ms. so x ms are x/delta_t points.
+        end
         
+
         %adds the reference data so that for every metabolite there is the reference peak as well in the spectrum for LCM processing; but LCM has a problem when the real part of the ref peak is negative everywhere;
         %so the reference peak get not truncated at the beginning (then it would get a phase 1st order and could be totally negative) but at the end; then it gets added to the metabo FID that gets truncated at the 
         %beginning. If one would not truncate the ref FID but add the trunc metabo FID to the (trunc_point+1). point of the ref peak, this would be equal to setting the metabo FID at the beginning to zero which leads
@@ -196,7 +208,13 @@ for file_no = 1:total_files
         fprintf(makebasis_fid, ' $NMEACH\n'); 
         fprintf(makebasis_fid, ' filraw=''%s/%.6fms/%s_%.6f.RAW''\n',out_dir,acq_delay(delay_no),metabo_names{file_no},acq_delay(delay_no));
         fprintf(makebasis_fid, ' METABO=''%s''\n',metabo_names{file_no});
-        fprintf(makebasis_fid, ' DEGZER=%3.1f\n',degzer);       %Zero order phase of metabo
+        if strcmp(metabo_names{file_no},'MM_meas')
+            degzer = 180;
+            fprintf(makebasis_fid, ' DEGZER=%3.1f\n',degzer);       %Zero order phase of MM
+        else
+            fprintf(makebasis_fid, ' DEGZER=%3.1f\n',degzer);       %Zero order phase of metabo
+        end
+        
         fprintf(makebasis_fid, ' DEGPPM=%3.1f\n',degppm);       %First order phase of metabo 
         
 %         if(strcmp(metabo_names{file_no}, 'PCh'))                %PCh has different concentration in this simulation
@@ -204,8 +222,11 @@ for file_no = 1:total_files
 %         else
             fprintf(makebasis_fid, ' CONC=1.\n');
 %        end
-        
+        if strcmp(metabo_names{file_no},'MM_meas')
+        fprintf(makebasis_fid, ' XTRASH = -0.175\n');           % manually tuned shift for MM
+        else
         fprintf(makebasis_fid, ' XTRASH = -0.0005\n');           % Extra Shift: Shifts All Data by e.g. -0.05 ppm
+        end
         fprintf(makebasis_fid, ' concsc=1.,  fwhmsm=.0\n');     %concsc= concentration of the standard (reference), fwhmsm gibts nirgends im LCM Manual !!?? Hat Provencher dazugeschrieben???
         fprintf(makebasis_fid, ' PPMAPP=0.1, -.4\n');  
         %PPMAPP is the apparent (unreferenced) ppm-axis that contains referencing peak. If DSS (TMS) is the marker for the metabolite, then PPMAPP = 0.1, -0.4 is typically sufficient to bracket the peak.
