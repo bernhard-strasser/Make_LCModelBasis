@@ -107,7 +107,7 @@ if [[ -e $out_dir ]]; then
 		rm -r $out_dir
 	fi
 fi
-#read -p "MATLAAAAAB"
+read -p "MATLAAAAAB"
 m78 -nodisplay -nojvm < make_basis_txt2raw.m
 
 

@@ -162,7 +162,7 @@ for file_no = 1:total_files
     BeginTime = data_met_txt.textdata(logical(cellfun(@numel,regexpi(data_met_txt.textdata, 'BeginTime'))));
     BeginTime = str2double(strrep(strtrim(BeginTime),'BeginTime: ', ''));
     if(strcmp(metabo_names{file_no},'MM_meas'))
-        data_met_txt.data = data_met_txt.data/100;
+        data_met_txt.data = data_met_txt.data/1000;
     end
     
     for delay_no = 1:total_delays
@@ -209,7 +209,7 @@ for file_no = 1:total_files
         fprintf(makebasis_fid, ' filraw=''%s/%.6fms/%s_%.6f.RAW''\n',out_dir,acq_delay(delay_no),metabo_names{file_no},acq_delay(delay_no));
         fprintf(makebasis_fid, ' METABO=''%s''\n',metabo_names{file_no});
         if strcmp(metabo_names{file_no},'MM_meas')
-            degzer = 180;
+            degzer = 0;
             fprintf(makebasis_fid, ' DEGZER=%3.1f\n',degzer);       %Zero order phase of MM
         else
             fprintf(makebasis_fid, ' DEGZER=%3.1f\n',degzer);       %Zero order phase of metabo
@@ -223,7 +223,8 @@ for file_no = 1:total_files
             fprintf(makebasis_fid, ' CONC=1.\n');
 %        end
         if strcmp(metabo_names{file_no},'MM_meas')
-        fprintf(makebasis_fid, ' XTRASH = -0.175\n');           % manually tuned shift for MM
+        %fprintf(makebasis_fid, ' XTRASH = -0.175\n');           % manually tuned shift for MM
+	fprintf(makebasis_fid, ' XTRASH = -0.094\n'); 
         else
         fprintf(makebasis_fid, ' XTRASH = -0.0005\n');           % Extra Shift: Shifts All Data by e.g. -0.05 ppm
         end
