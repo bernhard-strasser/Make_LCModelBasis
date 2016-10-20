@@ -9,51 +9,25 @@ clear variables;close all;
 %% 1. read out info from info-file
 
      
-% read out the input-files or ./.../directory
-info_fid = fopen('./tmp/metabo_info.txt','r');
-in_file = {fscanf(info_fid,'%s',1)};
 
+run ./tmp/InitialParameters.m
 
 % if a whole directory should be processed, then find out all the paths of all the .txt-files in this directory and save them as cell array.
 if (numel(strfind(in_file{1} ,'.txt'))==0)
     txt_files = dir(sprintf('%s/*.txt', in_file{1}));                               %in_file{1} is the input-directory; sprintf makes ./in_dir/*.txt; dir(directory/*.txt) gives a struct array with fields: name date ...
     in_file = strcat(sprintf('%s/', in_file{1}), cellstr(char(txt_files.name)));    %creates cell array with metabolite names. 
     clear txt_files                                                                 %txt_files.name is something strange, char(s1, s2,...) makes a character array (ie just a string) out of this 
-    total_files = numel(in_file);                                                   %cellstr makes a cell array of strings, and then it gets concatenated by strcat
-    out_dir = fscanf(info_fid,'%s',1);                                              %so that it has the form ./directory/file.txt
-
+                                                                                    %so that it has the form ./directory/file.txt
 % otherwise save the paths of the .txt-files given by user to make_basis.sh
 else
-    file_no=1;
-    while numel(strfind(in_file{file_no},'.txt'))==1
-        file_no=file_no+1;
-        in_file = [in_file; fscanf(info_fid,'%s',1)];
-    end
-    total_files = file_no-1;
     out_dir = sprintf('%s',in_file{file_no});
-    in_file(file_no)=[];
 end
 
+total_delays = numel(acq_delay);
+total_files = numel(in_file);
 
-% get path of reference-file
-ref_TMS_file = fscanf(info_fid,'%s',1);
 
-% ppm_start and ppm_end
-ppm_start = str2double(fscanf(info_fid,'%s',1));
-ppm_end = str2double(fscanf(info_fid,'%s',1));
 
-%%%%%%% get all the acq delays for which the conversion should be done %%%%%%%%
-delay_no = 1;
-acq_delay = [{fscanf(info_fid,'%s',1)}];
-while ~(strcmp(acq_delay(delay_no),'END'))          %at the end of info-file there is 'END', 
-    delay_no = delay_no+1;
-    acq_delay = [acq_delay; fscanf(info_fid,'%s',1)];
-end
-total_delays = delay_no-1;
-acq_delay(delay_no)=[];
-acq_delay = str2double(acq_delay);
-
-fclose(info_fid);
 
 
 %% 2. Replace the file-list names with their LCModel-names 
@@ -70,16 +44,18 @@ end
 %%%%%%% get all the names of the metabolites and replace the input with their standard names (eg make Ala out of ala_7T and so on) %%%%%%%%
 metabo_seekndestroy = struct( ...
 'search', ...
-{'acetate','act','ala','alphaglucose','asp','betaglucose','cho','(?<!p)cr','gaba','glc(?!_)','gln','glu(?!c)','gly','gpc','GSH','Glutathione','ins','lac','lip_c','mI' ,'mm3','mm4','naa(?!g)','naag','pch','pcr','scyllo','tau','fat','water','MM_meas'}, ...
+{'acetate','act','ala','alphaglucose','asp','betaglucose','cho','(?<!p)cr','gaba','glc(?!_)','gln','glu(?!c)','gly','gpc','GSH','Glutathione','ins','lac','lip_c','mI' ,'mm3','mm4','naa(?!g)','naag','pch','pcr','scyllo','tau','fat','water','MM_meas','TwoHG','2HG'}, ...
 'replace', ...
-{'Act'    ,'Act','Ala','Glc'         ,'Asp','Glc_B'   ,'Cho','Cr'      ,'GABA','Glc'     ,'Gln','Glu'     ,'Gly','GPC','GSH','GSH'        ,'Ins','Lac','Lip_c','Ins','mm3','mm4','NAA'     ,'NAAG','PCh','PCr','Scyllo','Tau','fat','water','MM_meas'});
+{'Act'    ,'Act','Ala','Glc'         ,'Asp','Glc_B'   ,'Cho','Cr'      ,'GABA','Glc'     ,'Gln','Glu'     ,'Gly','GPC','GSH','GSH'        ,'Ins','Lac','Lip_c','Ins','mm3','mm4','NAA'     ,'NAAG','PCh','PCr','Scyllo','Tau','fat','water','MM_meas','TwoHG','TwoHG'});
 % (?<!p)cr means that if a 'p' is before the 'cr' it is no match, only if it's just 'cr'it is counted as a match. ("look behind from current position", see matlab internet help > regexp > lookaround operators), 
 % the same for naa where naag is not counted as match (look ahead)
 % alphaglucose = Glc, because betaglucose can hardly be detected in vivo
 
 
-metabo_dummy = regexpi(in_file, '/\w*\.txt', 'match');    % regexpi(s1,s2,'match') searches for string s2 within  string s1, and gives those parts that matches, /\w* means: search for string starting with / followed
-metabo_names = [metabo_dummy{:}];                         % by any number or any char; \ is an escape symbol, means that . should not treated as regul expre but as literal char. so this searches for 'anything/anything.txt'
+metabo_dummy = regexpi(in_file, '/[^/]*\.txt', 'match');     % regexpi(s1,s2,'match') searches for string s2 within  string s1, and gives those parts that matches, /[^/]* means: search for string starting with / followed
+% by any character which is not a "/"; \ is an escape symbol, means that . should not treated as regul expre but as literal char. so this searches for 'anything/anything.txt'
+metabo_dummy = {regexprep([metabo_dummy{:}],'[^\w\.]','')};  % Remove all non-alphabetic, non-numeric and non-underscore characters, except of dots
+metabo_names = [metabo_dummy{:}];                           
 
 
 for search_dummy = 1:size({metabo_seekndestroy.search},2)
@@ -102,22 +78,47 @@ end
 %% 3. Get info from first .txt-file
 
 
-    first_txt_fid = fopen(in_file{1},'r');
-    tline = fgetl(first_txt_fid);
-    while ~strcmp(tline, 'Signal and FFT')
-        if(numel(strfind(tline, 'PointsInDataset:'))>0)
-            total_points = str2num(strrep(tline, 'PointsInDataset: ', ''));
-        elseif(numel(strfind(tline, 'SamplingInterval:'))>0)
-            delta_t = str2num(strrep(tline, 'SamplingInterval: ', ''))/1000;   %/1000 so that the unit is s
-        elseif(numel(strfind(tline, 'TransmitterFrequency:'))>0)
-            hzpppm = str2num(strrep(tline, 'TransmitterFrequency: ', ''))/1000000;   % [MHz]
-        end
-        tline = fgetl(first_txt_fid);
+first_txt_fid = fopen(in_file{1},'r');
+tline = fgetl(first_txt_fid);
+while ~strcmp(tline, 'Signal and FFT')
+    if(numel(strfind(tline, 'PointsInDataset:'))>0)
+        total_points = str2num(strrep(tline, 'PointsInDataset: ', ''));
+    elseif(numel(strfind(tline, 'SamplingInterval:'))>0)
+        delta_t = str2num(strrep(tline, 'SamplingInterval: ', ''))/1000;   %/1000 so that the unit is s
+    elseif(numel(strfind(tline, 'TransmitterFrequency:'))>0)
+        hzpppm = str2num(strrep(tline, 'TransmitterFrequency: ', ''))/1000000;   % [MHz]
     end
-    fclose(first_txt_fid);
+    tline = fgetl(first_txt_fid);
+end
+fclose(first_txt_fid);
 
-    save('./tmp/BasisCalTestings.mat', 'hzpppm', 'delta_t', 'total_points', 'out_dir', 'acq_delay');
+if(~exist('vecSizeOfOutput','var'))
+    vecSizeOfOutput = total_points;
+end
+if(exist('dwelltimeOfOutput_ms','var'))
+	delta_t_Output = dwelltimeOfOutput_ms/1000;
+else
+	delta_t_Output = delta_t * total_points/vecSizeOfOutput;
+end
+if(delta_t_Output ~= delta_t || vecSizeOfOutput ~= total_points)
+	OldGrid = 0:delta_t:(delta_t*(total_points-1));
+	NewGrid = 0:delta_t_Output:(delta_t_Output*(vecSizeOfOutput-1));
+end
+save('./tmp/BasisCalTestings.mat', 'hzpppm', 'delta_t','delta_t_Output', 'total_points','vecSizeOfOutput', 'out_dir', 'acq_delay');
     
+
+% for fileno = 1:numel(in_file)
+% 
+%     [CurData,CurjMRUIInfo] = io_readjmrui(in_file{fileno});
+%     test = io_writejmrui(CurData,CurjMRUIInfo,['./tmp' regexprep(in_file{fileno},regexprep(in_file{fileno},'/[^/]*$',''),'')]);
+% end
+
+
+%%
+
+
+
+
 %% 4. Write that part of makebasis.in that is equal for all metabolites
     
 
@@ -132,8 +133,8 @@ for delay_no = 1:total_delays
     
     fprintf(makebasis_fid, ' $NMALL\n');
     fprintf(makebasis_fid,' HZPPPM=%8.4f\n', hzpppm);
-    fprintf(makebasis_fid,' DELTAT=%10.9f\n', delta_t);
-    fprintf(makebasis_fid,' nunfil=%d\n', total_points-round(acq_delay(delay_no)/(1000*delta_t)));                   %1 point is 1000delta_t ms --> 1 ms is 1/(1000delta_t) points. -> acq_delay ms are acq_del/(1000delta_t) p
+    fprintf(makebasis_fid,' DELTAT=%10.9f\n', delta_t_Output);
+    fprintf(makebasis_fid,' nunfil=%d\n', vecSizeOfOutput-round(acq_delay(delay_no)/(1000*delta_t_Output)));                   %1 point is 1000delta_t ms --> 1 ms is 1/(1000delta_t) points. -> acq_delay ms are acq_del/(1000delta_t) p
     fprintf(makebasis_fid,' FILBAS=''%s/fid_%.6fms.basis''\n', out_dir, acq_delay(delay_no));   %path where basis-file should be created
     fprintf(makebasis_fid,' FILPS=''%s/fid_%.6fms.ps''\n', out_dir, acq_delay(delay_no));
     fprintf(makebasis_fid,' AUTOSC=.false.\n');                                                                      %Autoscaling: scales the individual metabos automatically
@@ -151,7 +152,29 @@ end
 
 %read data of the reference.txt file that is used for all .RAW-files
 data_ref_txt = importdata(sprintf('%s',ref_TMS_file), '\t', 21);
-
+if(exist('NewGrid','var'))
+	
+	% If our new grid e.g. is much shorter in time, we would get strong gibbs-ringing because we measure so shortly, and the FID is not decayed. In this case, let the new data decay the same
+	% as the old.
+	if(max(NewGrid) ~= max(OldGrid))
+		[Maxima,peakloc] = findpeaks(data_ref_txt.data(:,1));
+		times = (peakloc-1)*delta_t;
+		ExpFitty = fit(times,Maxima,'exp1');
+		a = coeffvalues(ExpFitty); a = -1/a(2);
+		ExpAddDecay = repmat(transpose(exp(- (0:delta_t_Output:max(NewGrid))/max(NewGrid) *(max(OldGrid)-max(NewGrid))/a)),[1 2]);
+	end
+	
+    data_ref_txt2 = transpose(interp1(OldGrid,data_ref_txt.data(:,1),NewGrid));
+    data_ref_txt2(:,2) = interp1(OldGrid,data_ref_txt.data(:,2),NewGrid);
+	if(exist('ExpAddDecay','var'))
+		data_ref_txt2 = data_ref_txt2 .* ExpAddDecay;									% Additionally decay data, so that we get same gibbs-ringing artifact than before 
+	end
+    data_ref_txt2(:,3) = interp1(OldGrid,data_ref_txt.data(:,3),NewGrid);
+    data_ref_txt2(:,4) = interp1(OldGrid,data_ref_txt.data(:,4),NewGrid);
+    data_ref_txt.data = data_ref_txt2; clear data_ref_txt2    
+elseif(vecSizeOfOutput > total_points)
+        error('Error: vecSizeOfOutput > total_points.')
+end
 
 %%%%%%%% write .RAW-data and that parts of makebasis.in that contain info of each metabolite %%%%%%%
 for file_no = 1:total_files
@@ -163,6 +186,19 @@ for file_no = 1:total_files
     BeginTime = str2double(strrep(strtrim(BeginTime),'BeginTime: ', ''));
     if(strcmp(metabo_names{file_no},'MM_meas'))
         data_met_txt.data = data_met_txt.data/1000;
+    end
+    
+    
+    % Assuming vecSizeOfOutput < total_points
+    if(exist('NewGrid','var'))
+        data_met_txt2 = transpose(interp1(OldGrid,data_met_txt.data(:,1),NewGrid));
+        data_met_txt2(:,2) = interp1(OldGrid,data_met_txt.data(:,2),NewGrid);
+		if(exist('ExpAddDecay','var'))
+			data_met_txt2 = data_met_txt2 .* ExpAddDecay;
+		end
+        data_met_txt2(:,3) = interp1(OldGrid,data_met_txt.data(:,3),NewGrid);
+        data_met_txt2(:,4) = interp1(OldGrid,data_met_txt.data(:,4),NewGrid);
+        data_met_txt.data = data_met_txt2; clear data_met_txt2
     end
     
     for delay_no = 1:total_delays
@@ -183,9 +219,9 @@ for file_no = 1:total_files
         if acq_delay(delay_no)<=1.3 && strcmp(metabo_names{file_no},'MM_meas')
             trunc_points = 0; 
         elseif acq_delay(delay_no)>1.3 && strcmp(metabo_names{file_no},'MM_meas')
-            trunc_points = round((acq_delay(delay_no)-acq_delay(delay_no-1))/(1000*delta_t));
+            trunc_points = round((acq_delay(delay_no)-acq_delay(delay_no-1))/(1000*delta_t_Output));
         else
-            trunc_points = round(acq_delay(delay_no)/(1000*delta_t));                                                   %1 point means delta_t ms. so x ms are x/delta_t points.
+            trunc_points = round(acq_delay(delay_no)/(1000*delta_t_Output));                                                   %1 point means delta_t_Output ms. so x ms are x/delta_t_Output points.
         end
         
 
@@ -193,7 +229,7 @@ for file_no = 1:total_files
         %so the reference peak get not truncated at the beginning (then it would get a phase 1st order and could be totally negative) but at the end; then it gets added to the metabo FID that gets truncated at the 
         %beginning. If one would not truncate the ref FID but add the trunc metabo FID to the (trunc_point+1). point of the ref peak, this would be equal to setting the metabo FID at the beginning to zero which leads
         %to shit.
-        data_trunc = data_met_txt.data(trunc_points+1:end,1:2)+data_ref_txt.data(1:total_points-trunc_points,1:2);  %only writes columns 1 (real FID-data) and 2 (imaginary FID-data) (col3,4 = spectra) 
+        data_trunc = data_met_txt.data(trunc_points+1:end,1:2)+data_ref_txt.data(1:vecSizeOfOutput-trunc_points,1:2);  %only writes columns 1 (real FID-data) and 2 (imaginary FID-data) (col3,4 = spectra) 
         
         data_trunc(:,2) = (-1)*data_trunc(:,2);                                             %multiplying the imaginary part of FID results in flipping the spectrum (eg when the reference peak is right to         
         data_trunc=[(data_trunc(:,1))';data_trunc(:,2)'];                                   %some other peak after multiplying it is on the left.) Why is this needed to be done??

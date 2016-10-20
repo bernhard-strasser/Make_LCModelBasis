@@ -12,6 +12,14 @@
 ######### The .txt-files have to include the metabolite names in their names. The program searches for:
 ######### 'ala','asp','cho','cr','gaba','glc','gln','glu','gly','gpc','lac','lip_c','mI','ins','mm3','mm4','naa','naag','pch','pcr','scyllo','tau' (case-insensitive)
 
+
+
+## SET PATHS
+matlabp=/usr/local/matlab81/bin/matlab
+tmp_dir="./tmp"
+Par="${tmp_dir}/InitialParameters.m"
+
+
 echo -e "\n\n   START"
 
 #1.
@@ -23,6 +31,8 @@ acq_delay_flag=0
 reference_TMS_flag=0
 ppm_start_flag=0
 ppm_end_flag=0
+vecSizeOfOutput_flag=0
+dwelltimeOfOutput_ms_flag=0
 
 in_file="./"
 out_dir="./basis_files"
@@ -30,7 +40,7 @@ acq_delay=0
 ppm_start=4.2
 ppm_end=0.2
 
-while getopts 'i:o:a:r:s:e:' OPTION
+while getopts 'i:o:a:r:s:e:v:d:?' OPTION
 do
 	case $OPTION in
 	  i)	in_flag=1
@@ -50,6 +60,12 @@ do
 			;;
 	  e)	ppm_end_flag=1
 			ppm_end="$OPTARG"
+			;;
+	  v)	vecSizeOfOutput_flag=1
+			vecSizeOfOutput="$OPTARG"
+			;;
+	  d)	dwelltimeOfOutput_ms_flag=1
+			dwelltimeOfOutput_ms="$OPTARG"
 			;;
 	  ?)	printf "Usage: %s: [-i input_file or input_directory] (default: ./*.txt) [-o output_dir] (default: ./basis_files)  [-a acq_delay] (default=0ms, acq delay > 0ms truncates points at the beginning)\n[-r reference_file] (ref_file is FID of reference peak like dss/TMS) [-s ppm_start] [-e ppm_end] (ppm_start is the larger one!)\n" $(basename $0) >&2
 			exit 2
@@ -83,18 +99,34 @@ if [[ -e ./tmp ]]; then
 	rm -r ./tmp
 fi
 mkdir ./tmp
-tmp="./tmp/metabo_info.txt"
+
 
 #write info to parameter file#
-touch $tmp			
-chmod 755 $tmp   ### 755 = user: write read exec   group: read exec    world: read exec
-echo ${in_file} >  $tmp
-echo ${out_dir} >>  $tmp
-echo ${reference_TMS_file} >> $tmp
-echo ${ppm_start} >> $tmp
-echo ${ppm_end} >> $tmp
-echo ${acq_delay} >>  $tmp
-echo "END" >>  $tmp
+chmod 755 $Par   ### 755 = user: write read exec   group: read exec    world: read exec
+
+echo "out_dir = '${out_dir}';" > $Par
+curfile=0
+for infily in $in_file; do
+	let curfile++
+	echo "in_file{${curfile}} = '${infily}';" >> $Par
+done
+echo "ref_TMS_file = '${reference_TMS_file}';" >> $Par
+echo "ppm_start = ${ppm_start};" >> $Par
+echo "ppm_end = ${ppm_end};" >> $Par
+curacqdelay=0
+for acqqdelly in $acq_delay; do
+	let curacqdelay++
+	echo "acq_delay($curacqdelay) = ${acqqdelly};" >> $Par
+done
+if [[ $vecSizeOfOutput_flag -eq 1 && -n $vecSizeOfOutput ]]; then				# -n tests for non-emptiness
+	echo "vecSizeOfOutput = ${vecSizeOfOutput};" >> $Par
+fi
+if [[ $dwelltimeOfOutput_ms_flag -eq 1 && -n $dwelltimeOfOutput_ms ]]; then				# -n tests for non-emptiness
+	echo "dwelltimeOfOutput_ms = ${dwelltimeOfOutput_ms};" >> $Par
+fi
+#echo "" >> $Par
+
+
 
 #3.
 ############ READ OUT INPUT.txt-FILES, SAVE THEM AS .RAW-FILES AND WRITE makebasis.in  ############
@@ -107,24 +139,23 @@ if [[ -e $out_dir ]]; then
 		rm -r $out_dir
 	fi
 fi
-read -p "MATLAAAAAB"
-m78 -nodisplay -nojvm < make_basis_txt2raw.m
+read -p "Stop Before Matlab"
+$matlabp -nodisplay -nojvm < make_basis_txt2raw.m
 
-
+echo ""
+read -p "Stop Before Commanding LCModel to Create Basis-Set"
 echo -e "\n\nLCmodel processing started!\n"
-
 OutDir_list=$(find $out_dir/*ms -type d)
-
-for out_sub_dir in $OutDir_list ; do
+for out_sub_dir in $OutDir_list; do
 	echo "Processing $out_sub_dir"
 	$HOME/.lcmodel/bin/makebasis < $out_sub_dir/makebasis*.in
 	# rm -r $out_sub_dir
 done
 
 
-
+#read -p "Stop Before LCModel Test-Fitting for calibration"
 echo -e "\n\nStarting Calibration Test\n"
-m78 -nodisplay -nojvm < make_basis_txt2raw_CalibrationTest.m
+$matlabp -nodisplay -nojvm < make_basis_txt2raw_CalibrationTest.m
 /usr/local/lcmodel/bin/lcmodel < ${out_dir}/BasisCalibrationTest/CalibTest.control
 
 
