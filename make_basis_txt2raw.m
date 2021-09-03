@@ -44,18 +44,19 @@ end
 %%%%%%% get all the names of the metabolites and replace the input with their standard names (eg make Ala out of ala_7T and so on) %%%%%%%%
 metabo_seekndestroy = struct( ...
 'search', ...
-{'acetate','act','ala','alphaglucose','asp','betaglucose','cho','(?<!p)cr','gaba','glc(?!_)','gln','glu(?!c)','gly','gpc','GSH','Glutathione','ins','lac','lip_c','mI' ,'mm3','mm4','naa(?!g)','naag','pch','pcr','scyllo','tau','fat','water','MM_meas','TwoHG','2HG'}, ...
+{'acetate','act','ala','alphaglucose','asp','betaglucose','cho','(?<!p)cr','ethanolamine','gaba','glc(?!_)','gln','glu(?!c)','gly','gpc','GSH','Glutathione','ins','lac','lip_c','mI' ,'mm3','mm4','naa(?!g)','naag','pch','pcr','scyllo','tau','fat','water','MM_meas','TwoHG','2HG'}, ...
 'replace', ...
-{'Act'    ,'Act','Ala','Glc'         ,'Asp','Glc_B'   ,'Cho','Cr'      ,'GABA','Glc'     ,'Gln','Glu'     ,'Gly','GPC','GSH','GSH'        ,'Ins','Lac','Lip_c','Ins','mm3','mm4','NAA'     ,'NAAG','PCh','PCr','Scyllo','Tau','fat','water','MM_meas','TwoHG','TwoHG'});
+{'Act'    ,'Act','Ala','Glc'         ,'Asp','Glc_B'   ,'Cho','Cr'      ,'ETA','GABA','Glc'     ,'Gln','Glu'     ,'Gly','GPC','GSH','GSH'        ,'Ins','Lac','Lip_c','Ins','mm3','mm4','NAA'     ,'NAAG','PCh','PCr','Scyllo','Tau','fat','water','MM_meas','TwoHG','TwoHG'});
 % (?<!p)cr means that if a 'p' is before the 'cr' it is no match, only if it's just 'cr'it is counted as a match. ("look behind from current position", see matlab internet help > regexp > lookaround operators), 
 % the same for naa where naag is not counted as match (look ahead)
 % alphaglucose = Glc, because betaglucose can hardly be detected in vivo
 
 
-metabo_dummy = regexpi(in_file, '/[^/]*\.txt', 'match');     % regexpi(s1,s2,'match') searches for string s2 within  string s1, and gives those parts that matches, /[^/]* means: search for string starting with / followed
-% by any character which is not a "/"; \ is an escape symbol, means that . should not treated as regul expre but as literal char. so this searches for 'anything/anything.txt'
-metabo_dummy = {regexprep([metabo_dummy{:}],'[^\w\.]','')};  % Remove all non-alphabetic, non-numeric and non-underscore characters, except of dots
-metabo_names = [metabo_dummy{:}];                           
+metabo_dummy = regexpi(in_file, '/\w*\.txt', 'match');    % regexpi(s1,s2,'match') searches for string s2 within  string s1, and gives those parts that matches, /\w* means: search for string starting with / followed
+metabo_dummy = regexprep([metabo_dummy{:}],'/','');
+metabo_dummy = regexprep(metabo_dummy,'.txt','');
+
+metabo_names = metabo_dummy;                         % by any number or any char; \ is an escape symbol, means that . should not treated as regul expre but as literal char. so this searches for 'anything/anything.txt'
 
 
 for search_dummy = 1:size({metabo_seekndestroy.search},2)
@@ -151,7 +152,7 @@ end
 
 
 %read data of the reference.txt file that is used for all .RAW-files
-data_ref_txt = importdata(sprintf('%s',ref_TMS_file), '\t', 21);
+data_ref_txt = importdata(sprintf('%s',ref_TMS_file), '\t');
 if(exist('NewGrid','var'))
 	
 	% If our new grid e.g. is much shorter in time, we would get strong gibbs-ringing because we measure so shortly, and the FID is not decayed. In this case, let the new data decay the same
@@ -179,7 +180,7 @@ end
 %%%%%%%% write .RAW-data and that parts of makebasis.in that contain info of each metabolite %%%%%%%
 for file_no = 1:total_files
  
-    data_met_txt = importdata(sprintf('%s', in_file{file_no}), '\t', 21);       %imports data from the in_file and gives an cell array with one struct for each metabolite
+    data_met_txt = importdata(sprintf('%s', in_file{file_no}), '\t');       %imports data from the in_file and gives an cell array with one struct for each metabolite
     degzer = data_met_txt.textdata(logical(cellfun(@numel,regexpi(data_met_txt.textdata, 'ZeroOrder'))));
     degzer = str2double(strrep(strtrim(degzer),'ZeroOrderPhase: ', ''));
     BeginTime = data_met_txt.textdata(logical(cellfun(@numel,regexpi(data_met_txt.textdata, 'BeginTime'))));

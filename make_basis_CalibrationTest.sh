@@ -15,7 +15,7 @@
 
 
 ## SET PATHS
-matlabp=/usr/local/matlab81/bin/matlab
+matlabp='/bilbo/usr/local/matlab2013a/bin/matlab'
 tmp_dir="./tmp"
 Par="${tmp_dir}/InitialParameters.m"
 
@@ -139,11 +139,11 @@ if [[ -e $out_dir ]]; then
 		rm -r $out_dir
 	fi
 fi
-read -p "Stop Before Matlab"
+#read -p "Stop Before Matlab"
 $matlabp -nodisplay -nojvm < make_basis_txt2raw.m
 
 echo ""
-read -p "Stop Before Commanding LCModel to Create Basis-Set"
+#read -p "Stop Before Commanding LCModel to Create Basis-Set"
 echo -e "\n\nLCmodel processing started!\n"
 OutDir_list=$(find $out_dir/*ms -type d)
 for out_sub_dir in $OutDir_list; do
@@ -156,7 +156,7 @@ done
 #read -p "Stop Before LCModel Test-Fitting for calibration"
 echo -e "\n\nStarting Calibration Test\n"
 $matlabp -nodisplay -nojvm < make_basis_txt2raw_CalibrationTest.m
-/usr/local/lcmodel/bin/lcmodel < ${out_dir}/BasisCalibrationTest/CalibTest.control
+$HOME/.lcmodel/bin/lcmodel < ${out_dir}/BasisCalibrationTest/CalibTest.control
 
 
 rm -r ./tmp
