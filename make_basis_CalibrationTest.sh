@@ -15,12 +15,27 @@
 
 
 ## SET PATHS
-matlabp='/bilbo/usr/local/matlab2013a/bin/matlab'
+matlabp='/bilbo/usr/local/matlab2017b/bin/matlab'
 tmp_dir="./tmp"
 Par="${tmp_dir}/InitialParameters.m"
 
 
 echo -e "\n\n   START"
+
+
+#0.
+################## WRITE INFO TO tmp.txt  ########################
+echo -e "\nWrite user input to temp file!"
+if [[ -e ./$tmp_dir ]]; then
+	rm -r ./$tmp_dir
+fi
+mkdir $tmp_dir
+hostyy=$(hostname)
+logfile="./tmp/logfile.log"
+echo "Number of arguments: $#"
+echo -e "Run Script on $hostyy with parameters:\n$0 $*\n\n"
+echo -e "Run Script on $hostyy with parameters:\n$0 $*" >"$logfile"
+
 
 #1.
 ############# DEFINE ARGUMENTS/PARAMETER OPTIONS ####################
@@ -33,14 +48,15 @@ ppm_start_flag=0
 ppm_end_flag=0
 vecSizeOfOutput_flag=0
 dwelltimeOfOutput_ms_flag=0
-
+zeroOrderPhase_deg_flag=0
+zeroOrderPhase_deg=0
 in_file="./"
 out_dir="./basis_files"
 acq_delay=0
 ppm_start=4.2
 ppm_end=0.2
 
-while getopts 'i:o:a:r:s:e:v:d:?' OPTION
+while getopts 'i:o:a:r:s:e:v:d:z:?' OPTION
 do
 	case $OPTION in
 	  i)	in_flag=1
@@ -67,6 +83,10 @@ do
 	  d)	dwelltimeOfOutput_ms_flag=1
 			dwelltimeOfOutput_ms="$OPTARG"
 			;;
+	  z)	zeroOrderPhase_deg_flag=1
+			zeroOrderPhase_deg="$OPTARG"
+			;;			
+			
 	  ?)	printf "Usage: %s: [-i input_file or input_directory] (default: ./*.txt) [-o output_dir] (default: ./basis_files)  [-a acq_delay] (default=0ms, acq delay > 0ms truncates points at the beginning)\n[-r reference_file] (ref_file is FID of reference peak like dss/TMS) [-s ppm_start] [-e ppm_end] (ppm_start is the larger one!)\n" $(basename $0) >&2
 			exit 2
 			;;
@@ -92,15 +112,8 @@ shift $(($OPTIND - 1))
 #fi
 
 
+
 #2.
-################## WRITE INFO TO tmp.txt  ########################
-echo -e "\nWrite user input to temp file!"
-if [[ -e ./tmp ]]; then
-	rm -r ./tmp
-fi
-mkdir ./tmp
-
-
 #write info to parameter file#
 chmod 755 $Par   ### 755 = user: write read exec   group: read exec    world: read exec
 
@@ -124,6 +137,7 @@ fi
 if [[ $dwelltimeOfOutput_ms_flag -eq 1 && -n $dwelltimeOfOutput_ms ]]; then				# -n tests for non-emptiness
 	echo "dwelltimeOfOutput_ms = ${dwelltimeOfOutput_ms};" >> $Par
 fi
+echo "zeroOrderPhase_deg = ${zeroOrderPhase_deg};" >> $Par
 #echo "" >> $Par
 
 
@@ -159,7 +173,20 @@ $matlabp -nodisplay -nojvm < make_basis_txt2raw_CalibrationTest.m
 $HOME/.lcmodel/bin/lcmodel < ${out_dir}/BasisCalibrationTest/CalibTest.control
 
 
+
+
+
+
+
+# Copy Program where this program lies in
+find ./tmp/ -type f -not -name '*.log' -delete
+tar cfJ "$out_dir/UsedSourcecode.tar.xz" *
+
+
+
 rm -r ./tmp
+
+
 echo -e "\n\n   END"
 
 

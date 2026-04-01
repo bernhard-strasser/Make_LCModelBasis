@@ -3,6 +3,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 clear variables;close all;
+ticcy = tic;
 
 
 
@@ -15,8 +16,11 @@ run ./tmp/InitialParameters.m
 % if a whole directory should be processed, then find out all the paths of all the .txt-files in this directory and save them as cell array.
 if (numel(strfind(in_file{1} ,'.txt'))==0)
     txt_files = dir(sprintf('%s/*.txt', in_file{1}));                               %in_file{1} is the input-directory; sprintf makes ./in_dir/*.txt; dir(directory/*.txt) gives a struct array with fields: name date ...
+    FileStartWithDot = {txt_files.name};
+    FileStartWithDot = startsWith(FileStartWithDot,'.');
     in_file = strcat(sprintf('%s/', in_file{1}), cellstr(char(txt_files.name)));    %creates cell array with metabolite names. 
-    clear txt_files                                                                 %txt_files.name is something strange, char(s1, s2,...) makes a character array (ie just a string) out of this 
+    in_file(FileStartWithDot) = [];
+    clear txt_files FileStartWithDot                                                                 %txt_files.name is something strange, char(s1, s2,...) makes a character array (ie just a string) out of this 
                                                                                     %so that it has the form ./directory/file.txt
 % otherwise save the paths of the .txt-files given by user to make_basis.sh
 else
@@ -122,6 +126,8 @@ save('./tmp/BasisCalTestings.mat', 'hzpppm', 'delta_t','delta_t_Output', 'total_
 
 %% 4. Write that part of makebasis.in that is equal for all metabolites
     
+fprintf('\nRemove the following points (rounded): %d',round(acq_delay/(1000*delta_t_Output)))
+fprintf('\nRemove the following points (NOT rounded): %f',(acq_delay/(1000*delta_t_Output)))
 
 for delay_no = 1:total_delays
     mkdir(sprintf('%s/%.6fms',out_dir,acq_delay(delay_no)));
@@ -153,6 +159,12 @@ end
 
 %read data of the reference.txt file that is used for all .RAW-files
 data_ref_txt = importdata(sprintf('%s',ref_TMS_file), '\t');
+
+
+
+
+
+
 if(exist('NewGrid','var'))
 	
 	% If our new grid e.g. is much shorter in time, we would get strong gibbs-ringing because we measure so shortly, and the FID is not decayed. In this case, let the new data decay the same
@@ -181,6 +193,8 @@ end
 for file_no = 1:total_files
  
     data_met_txt = importdata(sprintf('%s', in_file{file_no}), '\t');       %imports data from the in_file and gives an cell array with one struct for each metabolite
+    
+    
     degzer = data_met_txt.textdata(logical(cellfun(@numel,regexpi(data_met_txt.textdata, 'ZeroOrder'))));
     degzer = str2double(strrep(strtrim(degzer),'ZeroOrderPhase: ', ''));
     BeginTime = data_met_txt.textdata(logical(cellfun(@numel,regexpi(data_met_txt.textdata, 'BeginTime'))));
@@ -201,6 +215,10 @@ for file_no = 1:total_files
         data_met_txt2(:,4) = interp1(OldGrid,data_met_txt.data(:,4),NewGrid);
         data_met_txt.data = data_met_txt2; clear data_met_txt2
     end
+    
+    newcompl=( (data_met_txt.data(:,1)-1i*data_met_txt.data(:,2)))*exp(1i*zeroOrderPhase_deg / 180 * pi);
+    data_met_txt.data(:,1)=real(newcompl);
+    data_met_txt.data(:,2)=-imag(newcompl); clear newcompl
     
     for delay_no = 1:total_delays
         
@@ -276,5 +294,8 @@ for file_no = 1:total_files
     clear data_met_txt
 end
 
+
+%% Toccy
+fprintf('\n\nMatlab Part took %f s',toc(ticcy))
 
 
