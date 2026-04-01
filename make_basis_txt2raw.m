@@ -200,6 +200,8 @@ for delay_no = 1:total_delays
 
         if(strcmp(metabo_names{metabo_no},'MM_meas'))
             data_met_txt(metabo_no,delay_no).data = data_met_txt(metabo_no,delay_no).data/1000;
+        elseif(strfind(metabo_names{file_no},'MM_'))
+            data_met_txt.data = data_met_txt.data/7089.9;
         end
     end
 end
