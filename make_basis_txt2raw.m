@@ -232,16 +232,19 @@ for file_no = 1:total_files
         fprintf(raw_fid, ' ID=%s_%.6f.RAW\n',metabo_names{file_no},acq_delay(delay_no));	%volume gives the voxel size in ml. It is not important when using autoscaling; see also LCM-manual pages 90ff.
         fprintf(raw_fid, ' fmtdat=''(2e14.5)''\n tramp=1.0\n volume=1.0\n $END\n');  
         % writing data in the format 2e14.5
-        % if condition for MM inclusion - this implementation should be
-        % correct for acq delays bigger than 1.3, however, this should be
-        % double tested (now the acquisition delay for mm biger than 1.3ms is the difference see elseif part)
-        if acq_delay(delay_no)<=1.3 && strcmp(metabo_names{file_no},'MM_meas')
-            trunc_points = 0; 
-        elseif acq_delay(delay_no)>1.3 && strcmp(metabo_names{file_no},'MM_meas')
-            trunc_points = round((acq_delay(delay_no)-acq_delay(delay_no-1))/(1000*delta_t_Output));
-        else
-            trunc_points = round(acq_delay(delay_no)/(1000*delta_t_Output));                                                   %1 point means delta_t_Output ms. so x ms are x/delta_t_Output points.
-        end
+
+
+
+%         % if condition for MM inclusion - this implementation should be
+%         % correct for acq delays bigger than 1.3, however, this should be
+%         % double tested (now the acquisition delay for mm biger than 1.3ms is the difference see elseif part)
+%         if acq_delay(delay_no)<=1.3 && strcmp(metabo_names{metabo_no},'MM_meas')
+%             trunc_points = 0; 
+%         elseif acq_delay(delay_no)>1.3 && strcmp(metabo_names{metabo_no},'MM_meas')
+%             trunc_points = round((acq_delay(delay_no)-acq_delay(delay_no-1))/(1000*delta_t_Output));
+%         else
+%             trunc_points = round(acq_delay(delay_no)/(1000*delta_t_Output));                                                   %1 point means delta_t_Output ms. so x ms are x/delta_t_Output points.
+%         end
         
 
         %adds the reference data so that for every metabolite there is the reference peak as well in the spectrum for LCM processing; but LCM has a problem when the real part of the ref peak is negative everywhere;
