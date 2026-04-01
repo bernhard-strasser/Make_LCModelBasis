@@ -24,7 +24,7 @@ if (numel(strfind(in_file{1} ,'.txt'))==0)
                                                                                     %so that it has the form ./directory/file.txt
 % otherwise save the paths of the .txt-files given by user to make_basis.sh
 else
-    out_dir = sprintf('%s',in_file{file_no});
+    out_dir = sprintf('%s',in_file{metabo_no});
 end
 
 total_delays = numel(acq_delay);
@@ -97,17 +97,27 @@ while ~strcmp(tline, 'Signal and FFT')
 end
 fclose(first_txt_fid);
 
+
+vecSizeWasGiven_flag = true;
 if(~exist('vecSizeOfOutput','var'))
     vecSizeOfOutput = total_points;
+    vecSizeWasGiven_flag = false;
 end
 if(exist('dwelltimeOfOutput_ms','var'))
 	delta_t_Output = dwelltimeOfOutput_ms/1000;
 else
-	delta_t_Output = delta_t * total_points/vecSizeOfOutput;
+	delta_t_Output = delta_t;
 end
-if(delta_t_Output ~= delta_t || vecSizeOfOutput ~= total_points)
+if(delta_t_Output ~= delta_t || vecSizeOfOutput ~= total_points || any(acq_delay > 0))
 	OldGrid = 0:delta_t:(delta_t*(total_points-1));
-	NewGrid = 0:delta_t_Output:(delta_t_Output*(vecSizeOfOutput-1));
+
+    for delay_no = 1:total_delays
+
+        vecSizeOfOutput_AfterAcqDelay(delay_no) = vecSizeOfOutput - round(acq_delay(delay_no)/(1000*delta_t_Output));   
+	    NewGrid{delay_no} = linspace( acq_delay(delay_no)/1000,acq_delay(delay_no)/1000+delta_t_Output*(vecSizeOfOutput_AfterAcqDelay(delay_no)-1),vecSizeOfOutput_AfterAcqDelay(delay_no) );
+	    NewGrid_ForRef{delay_no} = linspace( 0,delta_t_Output*(vecSizeOfOutput_AfterAcqDelay(delay_no)-1),vecSizeOfOutput_AfterAcqDelay(delay_no) );    % Ref has no acquisition delay
+% 	    NewGrid_ForRef{delay_no} = 0:delta_t_Output:(delta_t_Output*(vecSizeOfOutput_AfterAcqDelay(delay_no)-1));
+    end
 end
 save('./tmp/BasisCalTestings.mat', 'hzpppm', 'delta_t','delta_t_Output', 'total_points','vecSizeOfOutput', 'out_dir', 'acq_delay');
     
@@ -119,15 +129,98 @@ save('./tmp/BasisCalTestings.mat', 'hzpppm', 'delta_t','delta_t_Output', 'total_
 % end
 
 
-%%
+
+%% Read Data
+
+%read data of the reference.txt file that is used for all .RAW-files
+% data_ref_txt = repmat(struct(),[1 total_delays]);
+data_ref_txt_Orig(1,1) = importdata(sprintf('%s',ref_TMS_file), '\t');
+data_ref_txt_Orig(1,1).data = data_ref_txt_Orig(1,1).data(:,1:2);
+
+% Metabos
+% data_met_txt = repmat(struct(),[total_files total_delays]);
+for metabo_no = 1:total_files
+    data_met_txt_Orig(metabo_no,1) = importdata(sprintf('%s', in_file{metabo_no}), '\t');       %imports data from the in_file and gives an cell array with one struct for each metabolite
+    data_met_txt_Orig(metabo_no,1).data = data_met_txt_Orig(metabo_no,1).data(:,1:2);
+end
 
 
+%% Interpolation of Basis Set
+% If we want to cut or undersample our original data
+% or if we want to have a certain acquisition delay
+% In both cases interpolate to a new grid
+if(exist('NewGrid','var'))
+	
+    for delay_no = 1:total_delays 
+    
+        
+        % Interpolate Reference Data
+
+% 	    % If our new grid e.g. is much shorter in time, we would get strong gibbs-ringing because we measure so shortly, and the FID is not decayed. In this case, let the new data decay the same
+% 	    % as the old.
+% 	    if(max(NewGrid_ForRef{delay_no}) ~= max(OldGrid))
+% 		    [Maxima,peakloc] = findpeaks(data_ref_txt(1,delay_no).data(:,1));
+% 		    times = (peakloc-1)*delta_t;
+% 		    ExpFitty = fit(times,Maxima,'exp1');
+% 		    a = coeffvalues(ExpFitty); a = -1/a(2);
+% 		    ExpAddDecay = repmat(transpose(exp(- (0:delta_t_Output:max(NewGrid_ForRef{delay_no}))/max(NewGrid_ForRef{delay_no}) *(max(OldGrid)-max(NewGrid_ForRef{delay_no}))/a)),[1 2]);
+% 	    end
+	    
+        data_ref_txt2 = transpose(interp1(OldGrid,data_ref_txt_Orig(1,1).data(:,1),NewGrid_ForRef{delay_no}));
+        data_ref_txt2(:,2) = interp1(OldGrid,data_ref_txt_Orig(1,1).data(:,2),NewGrid_ForRef{delay_no});
+	    if(exist('ExpAddDecay','var'))
+		    data_ref_txt2 = data_ref_txt2 .* ExpAddDecay;									% Additionally decay data, so that we get same gibbs-ringing artifact than before 
+        end
+        data_ref_txt(1,delay_no) = data_ref_txt_Orig(1,1);
+        data_ref_txt(1,delay_no).data = data_ref_txt2; clear data_ref_txt2    
+    
+    
+        % Interpolate Metabolite Data
+        for metabo_no = 1:total_files
+            data_met_txt2 = transpose(interp1(OldGrid,data_met_txt_Orig(metabo_no,1).data(:,1),NewGrid{delay_no}));
+            data_met_txt2(:,2) = interp1(OldGrid,data_met_txt_Orig(metabo_no,1).data(:,2),NewGrid{delay_no});
+            if(exist('ExpAddDecay','var'))
+			    data_met_txt2 = data_met_txt2 .* ExpAddDecay;
+            end
+            data_met_txt(metabo_no,delay_no) = data_met_txt_Orig(metabo_no,1);
+            data_met_txt(metabo_no,delay_no).data = data_met_txt2; clear data_met_txt2
+        end
+    
+    end
+
+elseif(vecSizeOfOutput > total_points)
+    error('Error: vecSizeOfOutput > total_points.')
+end
+
+
+%% Scale MM
+
+for delay_no = 1:total_delays 
+    for metabo_no = 1:total_files
+
+        if(strcmp(metabo_names{metabo_no},'MM_meas'))
+            data_met_txt(metabo_no,delay_no).data = data_met_txt(metabo_no,delay_no).data/1000;
+        end
+    end
+end
+
+
+
+%% Zero Order Phase
+    
+for delay_no = 1:total_delays 
+    for metabo_no = 1:total_files
+        newcompl=( (data_met_txt(metabo_no,delay_no).data(:,1)-1i*data_met_txt(metabo_no,delay_no).data(:,2)))*exp(1i*zeroOrderPhase_deg / 180 * pi);
+        data_met_txt(metabo_no,delay_no).data(:,1)=real(newcompl);
+        data_met_txt(metabo_no,delay_no).data(:,2)=-imag(newcompl); clear newcompl
+    end
+end
 
 
 %% 4. Write that part of makebasis.in that is equal for all metabolites
     
-fprintf('\nRemove the following points (rounded): %d',round(acq_delay/(1000*delta_t_Output)))
-fprintf('\nRemove the following points (NOT rounded): %f',(acq_delay/(1000*delta_t_Output)))
+% fprintf('\nRemove the following points (rounded): %d',round(acq_delay/(1000*delta_t)))
+fprintf('\nRemove the following points from original input data (before interpolation, NOT rounded): %f',(acq_delay/(1000*delta_t)))
 
 for delay_no = 1:total_delays
     mkdir(sprintf('%s/%.6fms',out_dir,acq_delay(delay_no)));
@@ -141,7 +234,7 @@ for delay_no = 1:total_delays
     fprintf(makebasis_fid, ' $NMALL\n');
     fprintf(makebasis_fid,' HZPPPM=%8.4f\n', hzpppm);
     fprintf(makebasis_fid,' DELTAT=%10.9f\n', delta_t_Output);
-    fprintf(makebasis_fid,' nunfil=%d\n', vecSizeOfOutput-round(acq_delay(delay_no)/(1000*delta_t_Output)));                   %1 point is 1000delta_t ms --> 1 ms is 1/(1000delta_t) points. -> acq_delay ms are acq_del/(1000delta_t) p
+    fprintf(makebasis_fid,' nunfil=%d\n', vecSizeOfOutput_AfterAcqDelay(delay_no));                   %1 point is 1000delta_t ms --> 1 ms is 1/(1000delta_t) points. -> acq_delay ms are acq_del/(1000delta_t) p
     fprintf(makebasis_fid,' FILBAS=''%s/fid_%.6fms.basis''\n', out_dir, acq_delay(delay_no));   %path where basis-file should be created
     fprintf(makebasis_fid,' FILPS=''%s/fid_%.6fms.ps''\n', out_dir, acq_delay(delay_no));
     fprintf(makebasis_fid,' AUTOSC=.false.\n');                                                                      %Autoscaling: scales the individual metabos automatically
@@ -154,82 +247,33 @@ end
 
 
 
+
 %% 5. Write .RAW-files and the metabolite-dependend part of makebasis.in
 
-
-%read data of the reference.txt file that is used for all .RAW-files
-data_ref_txt = importdata(sprintf('%s',ref_TMS_file), '\t');
-
-
-
-
-
-
-if(exist('NewGrid','var'))
-	
-	% If our new grid e.g. is much shorter in time, we would get strong gibbs-ringing because we measure so shortly, and the FID is not decayed. In this case, let the new data decay the same
-	% as the old.
-	if(max(NewGrid) ~= max(OldGrid))
-		[Maxima,peakloc] = findpeaks(data_ref_txt.data(:,1));
-		times = (peakloc-1)*delta_t;
-		ExpFitty = fit(times,Maxima,'exp1');
-		a = coeffvalues(ExpFitty); a = -1/a(2);
-		ExpAddDecay = repmat(transpose(exp(- (0:delta_t_Output:max(NewGrid))/max(NewGrid) *(max(OldGrid)-max(NewGrid))/a)),[1 2]);
-	end
-	
-    data_ref_txt2 = transpose(interp1(OldGrid,data_ref_txt.data(:,1),NewGrid));
-    data_ref_txt2(:,2) = interp1(OldGrid,data_ref_txt.data(:,2),NewGrid);
-	if(exist('ExpAddDecay','var'))
-		data_ref_txt2 = data_ref_txt2 .* ExpAddDecay;									% Additionally decay data, so that we get same gibbs-ringing artifact than before 
-	end
-    data_ref_txt2(:,3) = interp1(OldGrid,data_ref_txt.data(:,3),NewGrid);
-    data_ref_txt2(:,4) = interp1(OldGrid,data_ref_txt.data(:,4),NewGrid);
-    data_ref_txt.data = data_ref_txt2; clear data_ref_txt2    
-elseif(vecSizeOfOutput > total_points)
-        error('Error: vecSizeOfOutput > total_points.')
-end
-
 %%%%%%%% write .RAW-data and that parts of makebasis.in that contain info of each metabolite %%%%%%%
-for file_no = 1:total_files
+for metabo_no = 1:total_files
  
-    data_met_txt = importdata(sprintf('%s', in_file{file_no}), '\t');       %imports data from the in_file and gives an cell array with one struct for each metabolite
+
     
-    
-    degzer = data_met_txt.textdata(logical(cellfun(@numel,regexpi(data_met_txt.textdata, 'ZeroOrder'))));
+    degzer = data_met_txt(1,1).textdata(logical(cellfun(@numel,regexpi(data_met_txt(1,1).textdata, 'ZeroOrder'))));
     degzer = str2double(strrep(strtrim(degzer),'ZeroOrderPhase: ', ''));
-    BeginTime = data_met_txt.textdata(logical(cellfun(@numel,regexpi(data_met_txt.textdata, 'BeginTime'))));
+    if strcmp(metabo_names{metabo_no},'MM_meas')
+        degzer = 0;
+    end
+    BeginTime = data_met_txt(1,1).textdata(logical(cellfun(@numel,regexpi(data_met_txt(1,1).textdata, 'BeginTime'))));
     BeginTime = str2double(strrep(strtrim(BeginTime),'BeginTime: ', ''));
-    if(strcmp(metabo_names{file_no},'MM_meas'))
-        data_met_txt.data = data_met_txt.data/1000;
-    end
     
-    
-    % Assuming vecSizeOfOutput < total_points
-    if(exist('NewGrid','var'))
-        data_met_txt2 = transpose(interp1(OldGrid,data_met_txt.data(:,1),NewGrid));
-        data_met_txt2(:,2) = interp1(OldGrid,data_met_txt.data(:,2),NewGrid);
-		if(exist('ExpAddDecay','var'))
-			data_met_txt2 = data_met_txt2 .* ExpAddDecay;
-		end
-        data_met_txt2(:,3) = interp1(OldGrid,data_met_txt.data(:,3),NewGrid);
-        data_met_txt2(:,4) = interp1(OldGrid,data_met_txt.data(:,4),NewGrid);
-        data_met_txt.data = data_met_txt2; clear data_met_txt2
-    end
-    
-    newcompl=( (data_met_txt.data(:,1)-1i*data_met_txt.data(:,2)))*exp(1i*zeroOrderPhase_deg / 180 * pi);
-    data_met_txt.data(:,1)=real(newcompl);
-    data_met_txt.data(:,2)=-imag(newcompl); clear newcompl
     
     for delay_no = 1:total_delays
         
         BeginTime_AD = BeginTime + acq_delay(delay_no)/1000;
         degppm = hzpppm * BeginTime_AD * 360 * 0;
         %%%%%%% write .RAW-file %%%%%%%
-        raw_out = sprintf('%s/%.6fms/%s_%.6f.RAW', out_dir, acq_delay(delay_no), metabo_names{file_no}, acq_delay(delay_no));
+        raw_out = sprintf('%s/%.6fms/%s_%.6f.RAW', out_dir, acq_delay(delay_no), metabo_names{metabo_no}, acq_delay(delay_no));
         raw_fid = fopen(raw_out,'w');                                                       %'w' = open or create file for writing, discard content; w+: same but read and write
         % write some header info to RAW-file
         fprintf(raw_fid, ' $NMID\n');                                                       %tramp is a factor in order to scale the spectrum of the metabolite. it is not important when using autoscaling.
-        fprintf(raw_fid, ' ID=%s_%.6f.RAW\n',metabo_names{file_no},acq_delay(delay_no));	%volume gives the voxel size in ml. It is not important when using autoscaling; see also LCM-manual pages 90ff.
+        fprintf(raw_fid, ' ID=%s_%.6f.RAW\n',metabo_names{metabo_no},acq_delay(delay_no));	%volume gives the voxel size in ml. It is not important when using autoscaling; see also LCM-manual pages 90ff.
         fprintf(raw_fid, ' fmtdat=''(2e14.5)''\n tramp=1.0\n volume=1.0\n $END\n');  
         % writing data in the format 2e14.5
 
@@ -251,11 +295,12 @@ for file_no = 1:total_files
         %so the reference peak get not truncated at the beginning (then it would get a phase 1st order and could be totally negative) but at the end; then it gets added to the metabo FID that gets truncated at the 
         %beginning. If one would not truncate the ref FID but add the trunc metabo FID to the (trunc_point+1). point of the ref peak, this would be equal to setting the metabo FID at the beginning to zero which leads
         %to shit.
-        data_trunc = data_met_txt.data(trunc_points+1:end,1:2)+data_ref_txt.data(1:vecSizeOfOutput-trunc_points,1:2);  %only writes columns 1 (real FID-data) and 2 (imaginary FID-data) (col3,4 = spectra) 
+        data_trunc = data_met_txt(metabo_no,delay_no).data+data_ref_txt(1,delay_no).data;  %only writes columns 1 (real FID-data) and 2 (imaginary FID-data) (col3,4 = spectra) 
         
         data_trunc(:,2) = (-1)*data_trunc(:,2);                                             %multiplying the imaginary part of FID results in flipping the spectrum (eg when the reference peak is right to         
         data_trunc=[(data_trunc(:,1))';data_trunc(:,2)'];                                   %some other peak after multiplying it is on the left.) Why is this needed to be done??
                                                                                             %fprintf writes arrays from left to right!!!!  so this [data_trunc(:,1))' ...
+
         fprintf(raw_fid, '%14.5e%14.5e\n', data_trunc);                                                                                              
         fclose(raw_fid);  
         clear data_trunc 
@@ -264,14 +309,10 @@ for file_no = 1:total_files
         makebasis_out = sprintf('%s/%.6fms/makebasis_%.6f.in', out_dir, acq_delay(delay_no), acq_delay(delay_no));
         makebasis_fid = fopen(makebasis_out,'a');               % 'a' = open or create file, append data/text to file
         fprintf(makebasis_fid, ' $NMEACH\n'); 
-        fprintf(makebasis_fid, ' filraw=''%s/%.6fms/%s_%.6f.RAW''\n',out_dir,acq_delay(delay_no),metabo_names{file_no},acq_delay(delay_no));
-        fprintf(makebasis_fid, ' METABO=''%s''\n',metabo_names{file_no});
-        if strcmp(metabo_names{file_no},'MM_meas')
-            degzer = 0;
-            fprintf(makebasis_fid, ' DEGZER=%3.1f\n',degzer);       %Zero order phase of MM
-        else
-            fprintf(makebasis_fid, ' DEGZER=%3.1f\n',degzer);       %Zero order phase of metabo
-        end
+        fprintf(makebasis_fid, ' filraw=''%s/%.6fms/%s_%.6f.RAW''\n',out_dir,acq_delay(delay_no),metabo_names{metabo_no},acq_delay(delay_no));
+        fprintf(makebasis_fid, ' METABO=''%s''\n',metabo_names{metabo_no});
+        fprintf(makebasis_fid, ' DEGZER=%3.1f\n',degzer);       %Zero order phase
+
         
         fprintf(makebasis_fid, ' DEGPPM=%3.1f\n',degppm);       %First order phase of metabo 
         
@@ -280,11 +321,11 @@ for file_no = 1:total_files
 %         else
             fprintf(makebasis_fid, ' CONC=1.\n');
 %        end
-        if strcmp(metabo_names{file_no},'MM_meas')
-        %fprintf(makebasis_fid, ' XTRASH = -0.175\n');           % manually tuned shift for MM
-	fprintf(makebasis_fid, ' XTRASH = -0.094\n'); 
+        if strcmp(metabo_names{metabo_no},'MM_meas')
+            %fprintf(makebasis_fid, ' XTRASH = -0.175\n');          
+	        fprintf(makebasis_fid, ' XTRASH = -0.094\n');            % manually tuned shift for MM
         else
-        fprintf(makebasis_fid, ' XTRASH = -0.0005\n');           % Extra Shift: Shifts All Data by e.g. -0.05 ppm
+            fprintf(makebasis_fid, ' XTRASH = -0.0005\n');           % Extra Shift: Shifts All Data by e.g. -0.05 ppm
         end
         fprintf(makebasis_fid, ' concsc=1.,  fwhmsm=.0\n');     %concsc= concentration of the standard (reference), fwhmsm gibts nirgends im LCM Manual !!?? Hat Provencher dazugeschrieben???
         fprintf(makebasis_fid, ' PPMAPP=0.1, -.4\n');  
@@ -294,11 +335,9 @@ for file_no = 1:total_files
     end
     
     
-    clear data_met_txt
 end
-
+clear data_met_txt
 
 %% Toccy
 fprintf('\n\nMatlab Part took %f s',toc(ticcy))
-
 
